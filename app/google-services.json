@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "343266193490",
+    "project_id": "ulipur-school-monitor",
+    "storage_bucket": "ulipur-school-monitor.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:343266193490:android:4a76b07020d40e5662af8b",
+        "android_client_info": {
+          "package_name": "com.example.appdeeps"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAH0F-eVLDiNDN4Q65v6uvyQuWNatbuD2Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

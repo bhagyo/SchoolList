@@ -30,6 +30,19 @@ import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+
+// Add these imports right after the existing imports:
+import com.example.appdeeps.screens.components.dialogs.AboutDialog
+import com.example.appdeeps.screens.components.dialogs.EmergencyDialog
+//For tackling the three dot menu in top right
+import com.example.appdeeps.screens.components.ThreeDotMenu
+import com.example.appdeeps.screens.components.SchoolSearchBar
+
+//Utilities import
+import com.example.appdeeps.screens.components.StatisticsDashboard
+import com.example.appdeeps.screens.components.SchoolListHeader
+
+
 /**
  * SCHOOL LIST SCREEN
  *
@@ -106,7 +119,7 @@ fun SchoolListScreen(
         )
 
         // 2. Search Bar Component
-        SearchBar(
+        SchoolSearchBar(
             searchText = searchText,
             onSearchTextChange = { searchText = it }
         )
@@ -114,7 +127,7 @@ fun SchoolListScreen(
         // 3. Statistics Dashboard (4 Cards)
         StatisticsDashboard(
             isLoading = isLoading,
-            schools = schools,
+            allSchools = schools,
             filteredSchools = filteredSchools,
             isSearching = searchText.text.isNotEmpty()
         )
@@ -141,15 +154,15 @@ fun SchoolListScreen(
     }
 
     // ==================== DIALOGS ====================
-    AboutDialog(
-        showDialog = showAboutDialog,
-        onDismiss = { showAboutDialog = false }
-    )
+    // About Us Dialog
+    if (showAboutDialog) {
+        AboutDialog(onDismiss = { showAboutDialog = false })
+    }
 
-    EmergencyDialog(
-        showDialog = showEmergencyDialog,
-        onDismiss = { showEmergencyDialog = false }
-    )
+    // Emergency Numbers Dialog
+    if (showEmergencyDialog) {
+        EmergencyDialog(onDismiss = { showEmergencyDialog = false })
+    }
 }
 
 // ==================== FIREBASE DATA LOADER ====================
@@ -203,227 +216,8 @@ private fun loadSchoolsFromFirebase(
 
 // ==================== UI COMPONENTS ====================
 
-/**
- * Custom header for School List Screen with title and menu.
- *
- * @param onAboutClick Callback for About menu item
- * @param onEmergencyClick Callback for Emergency Numbers menu item
- */
-@Composable
-private fun SchoolListHeader(
-    onAboutClick: () -> Unit,
-    onEmergencyClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primary)
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Title Section
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "উলিপুর বিদ্যালয় মনিটরিং",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Text(
-                    text = "কুড়িগ্রাম, রংপুর",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                )
-            }
 
-            // Menu Section
-            ThreeDotMenu(
-                onAboutClick = onAboutClick,
-                onEmergencyClick = onEmergencyClick
-            )
-        }
-    }
-}
 
-/**
- * Three-dot dropdown menu with app options.
- */
-@Composable
-private fun ThreeDotMenu(
-    onAboutClick: () -> Unit,
-    onEmergencyClick: () -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "Menu",
-                tint = MaterialTheme.colorScheme.onPrimary
-            )
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text("আমাদের সম্পর্কে") },
-                onClick = {
-                    expanded = false
-                    onAboutClick()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("জরুরী নাম্বার") },
-                onClick = {
-                    expanded = false
-                    onEmergencyClick()
-                }
-            )
-        }
-    }
-}
-
-/**
- * Search bar component with clear functionality.
- *
- * @param searchText Current search query
- * @param onSearchTextChange Callback when search text changes
- */
-@Composable
-private fun SearchBar(
-    searchText: TextFieldValue,
-    onSearchTextChange: (TextFieldValue) -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = "Search",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Search TextField
-            TextField(
-                value = searchText,
-                onValueChange = onSearchTextChange,
-                modifier = Modifier.weight(1f),
-                placeholder = {
-                    Text(
-                        text = "বিদ্যালয়ের নাম, নম্বর বা ইউনিয়ন খুঁজুন...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.background,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.background,
-                    disabledContainerColor = MaterialTheme.colorScheme.background,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
-                ),
-                singleLine = true
-            )
-
-            // Clear button (only visible when there's text)
-            if (searchText.text.isNotEmpty()) {
-                IconButton(onClick = { onSearchTextChange(TextFieldValue("")) }) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Clear search",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Statistics dashboard showing 4 key metrics in cards.
- * Shows filtered values when search is active.
- *
- * @param isLoading Whether data is still loading
- * @param schools All schools (unfiltered)
- * @param filteredSchools Filtered schools based on search
- * @param isSearching Whether user is currently searching
- */
-@Composable
-private fun StatisticsDashboard(
-    isLoading: Boolean,
-    schools: List<School>,
-    filteredSchools: List<School>,
-    isSearching: Boolean
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-    ) {
-        // Row 1: Total Schools & Total Students
-        Row(modifier = Modifier.fillMaxWidth()) {
-            StatCard(
-                title = "মোট বিদ্যালয়",
-                value = if (isLoading) "..." else schools.size.toString(),
-                modifier = Modifier.weight(1f),
-                showFiltered = false,
-                searchActive = isSearching,
-                filteredValue = filteredSchools.size.toString()
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            StatCard(
-                title = "মোট শিক্ষার্থী",
-                value = if (isLoading) "..." else calculateTotalStudents(schools).toString(),
-                modifier = Modifier.weight(1f),
-                showFiltered = true,
-                searchActive = isSearching,
-                filteredValue = calculateTotalStudents(filteredSchools).toString()
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Row 2: Total Attendance & Average Attendance
-        Row(modifier = Modifier.fillMaxWidth()) {
-            StatCard(
-                title = "মোট উপস্থিতি",
-                value = if (isLoading) "..." else calculateTotalAttendance(schools).toString(),
-                modifier = Modifier.weight(1f),
-                showFiltered = true,
-                searchActive = isSearching,
-                filteredValue = calculateTotalAttendance(filteredSchools).toString()
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            StatCard(
-                title = "গড় উপস্থিতি",
-                value = if (isLoading) "..." else "${calculateAverageAttendance(schools)}%",
-                modifier = Modifier.weight(1f),
-                showFiltered = true,
-                searchActive = isSearching,
-                filteredValue = "${calculateAverageAttendance(filteredSchools)}%"
-            )
-        }
-    }
-}
 
 /**
  * Indicator showing search results count.
@@ -565,77 +359,6 @@ private fun SchoolList(
     }
 }
 
-// ==================== DIALOG COMPONENTS ====================
-
-/**
- * About dialog showing app information.
- */
-@Composable
-private fun AboutDialog(
-    showDialog: Boolean,
-    onDismiss: () -> Unit
-) {
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("আমাদের সম্পর্কে", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "এই অ্যাপটি উলিপুর বিদ্যালয় মনিটরিং সিস্টেমের জন্য তৈরি করা হয়েছে।\n\n" +
-                            "উদ্দেশ্য:\n" +
-                            "• সকল বিদ্যালয়ের উপস্থিতি মনিটরিং\n" +
-                            "• শিক্ষকদের সাথে সহজ যোগাযোগ\n" +
-                            "• বিদ্যালয়ের অবস্থান দেখা\n" +
-                            "• জরুরী ক্ষেত্রে দ্রুত সাহায্য\n\n" +
-                            "সংস্করণ: ১.০.০\n" +
-                            "ডেভেলপার: উলিপুর ডিজিটাল টিম"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = onDismiss) {
-                    Text("ঠিক আছে")
-                }
-            }
-        )
-    }
-}
-
-/**
- * Emergency contacts dialog.
- */
-@Composable
-private fun EmergencyDialog(
-    showDialog: Boolean,
-    onDismiss: () -> Unit
-) {
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("জরুরী নাম্বার", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text("জরুরী যোগাযোগের জন্য:", fontWeight = FontWeight.Medium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("• জাতীয় জরুরী সেবা: ৯৯৯")
-                    Text("• থানা: ০১৭１３-XXX")
-                    Text("• ফায়ার সার্ভিস: ０１７１-XXX")
-                    Text("• এম্বুলেন্স: ০১৭০-XXX")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("উলিপুর উপজেলা:")
-                    Text("• উপজেলা নির্বাহী অফিসার: XXX")
-                    Text("• শিক্ষা অফিসার: XXX")
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onDismiss) {
-                    Text("ঠিক আছে")
-                }
-            }
-        )
-    }
-}
-
-// ==================== HELPER FUNCTIONS ====================
 
 /**
  * Opens Google Maps for the given school location.
@@ -665,37 +388,7 @@ private fun openGoogleMaps(school: School, context: android.content.Context) {
     }
 }
 
-/**
- * Calculates average attendance percentage across schools.
- *
- * @param schools List of schools
- * @return Average attendance percentage (0 if empty list)
- */
-private fun calculateAverageAttendance(schools: List<School>): Int {
-    if (schools.isEmpty()) return 0
-    val total = schools.sumOf { it.attendancePercentage }
-    return total / schools.size
-}
 
-/**
- * Calculates total students across all schools.
- *
- * @param schools List of schools
- * @return Total number of students
- */
-private fun calculateTotalStudents(schools: List<School>): Int {
-    return schools.sumOf { it.totalStudents }
-}
-
-/**
- * Calculates total daily attendance across all schools.
- *
- * @param schools List of schools
- * @return Total daily attendance count
- */
-private fun calculateTotalAttendance(schools: List<School>): Int {
-    return schools.sumOf { it.dailyAttendance }
-}
 
 /**
  * Logs debug information to console.
@@ -704,66 +397,4 @@ private fun calculateTotalAttendance(schools: List<School>): Int {
  */
 private fun logDebugInfo(message: String) {
     println("🔍 DEBUG: $message")
-}
-
-// ==================== STATISTICS CARD COMPONENT ====================
-
-/**
- * Reusable statistics card for dashboard.
- * Shows filtered value when search is active and applicable.
- *
- * @param title Card title
- * @param value Primary value (total)
- * @param modifier Compose modifier
- * @param showFiltered Whether to show filtered value when searching
- * @param searchActive Whether a search is currently active
- * @param filteredValue Value when filtered (search results)
- */
-@Composable
-private fun StatCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    showFiltered: Boolean = false,
-    searchActive: Boolean = false,
-    filteredValue: String = ""
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (searchActive && showFiltered)
-                MaterialTheme.colorScheme.secondary
-            else
-                MaterialTheme.colorScheme.primary
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onPrimary,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = if (searchActive && showFiltered) filteredValue else value,
-                fontSize = 20.sp,
-                color = MaterialTheme.colorScheme.onPrimary,
-                fontWeight = FontWeight.Bold
-            )
-
-            // Show filtered indicator if applicable
-            if (searchActive && showFiltered) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "অনুসন্ধানকৃত",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                )
-            }
-        }
-    }
 }

@@ -42,6 +42,9 @@ import com.example.appdeeps.screens.components.SchoolSearchBar
 import com.example.appdeeps.screens.components.StatisticsDashboard
 import com.example.appdeeps.screens.components.SchoolListHeader
 
+// Add these import lines:
+import com.example.appdeeps.utils.MapUtils
+
 
 /**
  * SCHOOL LIST SCREEN

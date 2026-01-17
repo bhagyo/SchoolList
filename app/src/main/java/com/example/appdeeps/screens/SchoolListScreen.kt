@@ -44,6 +44,7 @@ import com.example.appdeeps.screens.components.SchoolListHeader
 
 // Add these import lines:
 import com.example.appdeeps.utils.MapUtils
+import androidx.core.net.toUri
 
 
 /**
@@ -374,9 +375,10 @@ private fun openGoogleMaps(school: School, context: android.content.Context) {
     if (school.latitude != 0.0 && school.longitude != 0.0) {
         try {
             // Try to open in Google Maps app
-            val gmmIntentUri = Uri.parse(
-                "geo:${school.latitude},${school.longitude}?q=${school.latitude},${school.longitude}(${Uri.encode(school.schoolName)})"
-            )
+            val gmmIntentUri =
+                "geo:${school.latitude},${school.longitude}?q=${school.latitude},${school.longitude}(${
+                    Uri.encode(school.schoolName)
+                })".toUri()
             val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
             mapIntent.setPackage("com.google.android.apps.maps")
             context.startActivity(mapIntent)

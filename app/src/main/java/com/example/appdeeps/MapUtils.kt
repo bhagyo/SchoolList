@@ -3,6 +3,7 @@ package com.example.appdeeps
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 
 fun openSchoolInGoogleMaps(context: Context, latitude: Double, longitude: Double, schoolName: String) {
     // Check if coordinates are valid (not 0,0)
@@ -12,7 +13,8 @@ fun openSchoolInGoogleMaps(context: Context, latitude: Double, longitude: Double
     }
 
     // Create Google Maps URI
-    val gmmIntentUri = Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude(${Uri.encode(schoolName)})")
+    val gmmIntentUri =
+        "geo:$latitude,$longitude?q=$latitude,$longitude(${Uri.encode(schoolName)})".toUri()
     val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
     mapIntent.setPackage("com.google.android.apps.maps")
 

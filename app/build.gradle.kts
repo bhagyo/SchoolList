@@ -61,6 +61,14 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx")
     implementation(libs.generativeai)
 
+    // Material3 Window Size Class (for responsive design)
+    implementation("androidx.compose.material3:material3-window-size-class:1.1.2")
+
+    // Navigation Compose
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+
+    // If you also need navigation animation:
+    implementation("com.google.accompanist:accompanist-navigation-animation:0.32.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

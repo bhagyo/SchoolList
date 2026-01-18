@@ -115,46 +115,80 @@ fun SchoolListScreen(
     }
 
     // ==================== MAIN UI STRUCTURE ====================
-    Column(modifier = Modifier.fillMaxSize()) {
-        // 1. Custom App Header with Menu
-        SchoolListHeader(
-            onAboutClick = { showAboutDialog = true },
-            onEmergencyClick = { showEmergencyDialog = true }
-        )
+    // Everything inside LazyColumn so it scrolls away
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp)
+    ) {
+        // 1. Custom App Header with Menu (still sticky if you want, or remove it)
+        item {
+            SchoolListHeader(
+                onAboutClick = { showAboutDialog = true },
+                onEmergencyClick = { showEmergencyDialog = true }
+            )
+        }
 
         // 2. Search Bar Component
-        SchoolSearchBar(
-            searchText = searchText,
-            onSearchTextChange = { searchText = it }
-        )
+        item {
+            SchoolSearchBar(
+                searchText = searchText,
+                onSearchTextChange = { searchText = it }
+            )
+        }
 
         // 3. Statistics Dashboard (4 Cards)
-        StatisticsDashboard(
-            isLoading = isLoading,
-            allSchools = schools,
-            filteredSchools = filteredSchools,
-            isSearching = searchText.text.isNotEmpty()
-        )
+        item {
+            StatisticsDashboard(
+                isLoading = isLoading,
+                allSchools = schools,
+                filteredSchools = filteredSchools,
+                isSearching = searchText.text.isNotEmpty()
+            )
+        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         // 4. Search Results Indicator
         if (searchText.text.isNotEmpty()) {
-            SearchResultsIndicator(
-                searchQuery = searchText.text,
-                resultCount = filteredSchools.size
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            item {
+                SearchResultsIndicator(
+                    searchQuery = searchText.text,
+                    resultCount = filteredSchools.size
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
 
         // 5. School List Content (Handles all states)
-        SchoolListContent(
-            isLoading = isLoading,
-            filteredSchools = filteredSchools,
-            searchQuery = searchText.text,
-            onSchoolClick = onSchoolClick,
-            onLocationClick = { school -> openGoogleMaps(school, context) }
-        )
+        when {
+            // Loading State
+            isLoading -> {
+                item {
+                    LoadingState()
+                }
+            }
+
+            // Empty State (no schools found)
+            filteredSchools.isEmpty() -> {
+                item {
+                    EmptyState(searchQuery = searchText.text)
+                }
+            }
+
+            // Success State (show school list)
+            else -> {
+                items(filteredSchools, key = { it.id }) { school ->
+                    SchoolCard(
+                        school = school,
+                        onClick = { onSchoolClick(school) },
+                        onLocationClick = { openGoogleMaps(school, context) }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
     }
 
     // ==================== DIALOGS ====================
@@ -220,9 +254,6 @@ private fun loadSchoolsFromFirebase(
 
 // ==================== UI COMPONENTS ====================
 
-
-
-
 /**
  * Indicator showing search results count.
  *
@@ -243,51 +274,14 @@ private fun SearchResultsIndicator(
 }
 
 /**
- * Main content area that handles all display states.
- *
- * @param isLoading Whether data is loading
- * @param filteredSchools Schools to display (already filtered)
- * @param searchQuery Current search query (for empty state messages)
- * @param onSchoolClick Callback when school card is clicked
- * @param onLocationClick Callback when location icon is clicked
- */
-@Composable
-private fun SchoolListContent(
-    isLoading: Boolean,
-    filteredSchools: List<School>,
-    searchQuery: String,
-    onSchoolClick: (School) -> Unit,
-    onLocationClick: (School) -> Unit
-) {
-    when {
-        // Loading State
-        isLoading -> {
-            LoadingState()
-        }
-
-        // Empty State (no schools found)
-        filteredSchools.isEmpty() -> {
-            EmptyState(searchQuery = searchQuery)
-        }
-
-        // Success State (show school list)
-        else -> {
-            SchoolList(
-                schools = filteredSchools,
-                onSchoolClick = onSchoolClick,
-                onLocationClick = onLocationClick
-            )
-        }
-    }
-}
-
-/**
  * Shows loading indicator while data is being fetched.
  */
 @Composable
 private fun LoadingState() {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -306,7 +300,9 @@ private fun LoadingState() {
 @Composable
 private fun EmptyState(searchQuery: String) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -336,35 +332,6 @@ private fun EmptyState(searchQuery: String) {
 }
 
 /**
- * Displays list of schools in a scrollable column.
- *
- * @param schools List of schools to display
- * @param onSchoolClick Callback when school card is clicked
- * @param onLocationClick Callback when location icon is clicked
- */
-@Composable
-private fun SchoolList(
-    schools: List<School>,
-    onSchoolClick: (School) -> Unit,
-    onLocationClick: (School) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(schools, key = { it.id }) { school ->
-            SchoolCard(
-                school = school,
-                onClick = { onSchoolClick(school) },
-                onLocationClick = { onLocationClick(school) }
-            )
-        }
-    }
-}
-
-
-/**
  * Opens Google Maps for the given school location.
  * Falls back to browser if Google Maps is not installed.
  *
@@ -392,8 +359,6 @@ private fun openGoogleMaps(school: School, context: android.content.Context) {
         }
     }
 }
-
-
 
 /**
  * Logs debug information to console.

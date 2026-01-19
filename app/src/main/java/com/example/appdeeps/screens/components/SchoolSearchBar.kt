@@ -80,7 +80,7 @@ private fun SearchTextField(
         modifier = Modifier.fillMaxWidth(),
         placeholder = {
             Text(
-                text = "বিদ্যালয়ের নাম, নম্বর বা ইউনিয়ন খুঁজুন...",
+                text = "কেন্দ্রের নাম, নম্বর বা ইউনিয়ন",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },

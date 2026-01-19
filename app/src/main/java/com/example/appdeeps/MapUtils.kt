@@ -25,7 +25,7 @@ fun openSchoolInGoogleMaps(context: Context, latitude: Double, longitude: Double
         // If Google Maps is not installed, open in browser
         val webIntent = Intent(
             Intent.ACTION_VIEW,
-            Uri.parse("https://www.google.com/maps/search/?api=1&query=$latitude,$longitude")
+            "https://www.google.com/maps/search/?api=1&query=$latitude,$longitude".toUri()
         )
         context.startActivity(webIntent)
     }

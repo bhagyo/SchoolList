@@ -58,7 +58,7 @@ fun SchoolDetailsScreen(
 
             /* -------- HEAD TEACHER -------- */
             TeacherCard(
-                title = "প্রধান শিক্ষক",
+                title = "প্রিজাইডিং অফিসার",
                 name = school.headmasterName,
                 phone = school.headmasterMobile,
                 context = context
@@ -68,7 +68,7 @@ fun SchoolDetailsScreen(
 
             /* -------- ASSISTANT HEAD -------- */
             TeacherCard(
-                title = "সহকারী প্রধান শিক্ষক",
+                title = "সহকারী প্রিজাইডিং অফিসার",
                 name = school.asstHeadmasterName,
                 phone = school.asstHeadmasterMobile,
                 context = context
@@ -194,10 +194,10 @@ private fun BasicInfoCard(school: School) {
     InfoCard(title = "মৌলিক তথ্য") {
         InfoText("ইউনিয়ন", school.unionName)
         InfoText("ঠিকানা", school.address)
-        InfoText("ছাত্র", "${school.maleStudents} জন")
-        InfoText("ছাত্রী", "${school.femaleStudents} জন")
-        InfoText("মোট ছাত্র-ছাত্রী", "${school.totalStudents} জন")
-        InfoText("দৈনিক উপস্থিতি", "${school.dailyAttendance} জন")
+        InfoText("পুরুষ ভোটার", "${school.maleStudents} জন")
+        InfoText("মহিলা ভোটার", "${school.femaleStudents} জন")
+        InfoText("মোট ভোটার", "${school.totalStudents} জন")
+        InfoText("প্রাপ্ত ভোট", "${school.dailyAttendance} জন")
     }
 }
 

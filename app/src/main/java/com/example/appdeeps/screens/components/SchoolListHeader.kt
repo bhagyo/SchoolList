@@ -62,7 +62,7 @@ private fun HeaderTitleSection(
     Column(modifier = modifier) {
         // Main Title
         Text(
-            text = "উলিপুর বিদ্যালয় মনিটরিং",
+            text = "উলিপুর ভোটকেন্দ্র পর্যবেক্ষণ",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onPrimary
@@ -70,7 +70,7 @@ private fun HeaderTitleSection(
 
         // Subtitle
         Text(
-            text = "কুড়িগ্রাম, রংপুর",
+            text = "কুড়িগ্রাম",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
         )

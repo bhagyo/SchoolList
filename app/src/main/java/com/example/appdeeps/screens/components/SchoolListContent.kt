@@ -74,7 +74,7 @@ private fun LoadingState() {
         CircularProgressIndicator()
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "ডেটা লোড হচ্ছে...",
+            text = "ডেটা লোড হচ্ছে \nআপনার ইন্টারনেট সংযোগ পরীক্ষা করুন",
             fontSize = 16.sp
         )
     }

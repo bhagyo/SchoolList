@@ -266,7 +266,7 @@ private fun SearchResultsIndicator(
     resultCount: Int
 ) {
     Text(
-        text = "‘$searchQuery’ অনুসন্ধানে ${resultCount}টি বিদ্যালয় পাওয়া গেছে",
+        text = "‘$searchQuery’ অনুসন্ধানে ${resultCount}টি ভোটকেন্দ্র পাওয়া গেছে",
         fontSize = 14.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp)
@@ -287,7 +287,7 @@ private fun LoadingState() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator()
             Spacer(modifier = Modifier.height(16.dp))
-            Text("ডেটা লোড হচ্ছে...")
+            Text("ডেটা লোড হচ্ছে \nআপনার ইন্টারনেট সংযোগ পরীক্ষা করুন")
         }
     }
 }
@@ -311,7 +311,7 @@ private fun EmptyState(searchQuery: String) {
         ) {
             if (searchQuery.isNotEmpty()) {
                 Text(
-                    text = "‘$searchQuery’ অনুসন্ধানে কোন বিদ্যালয় পাওয়া যায়নি",
+                    text = "‘$searchQuery’ অনুসন্ধানে কোন ভোটকেন্দ্র পাওয়া যায়নি",
                     fontSize = 16.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -321,7 +321,7 @@ private fun EmptyState(searchQuery: String) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                Text("কোনও বিদ্যালয়ের তথ্য পাওয়া যায়নি")
+                Text("কোনও ভোটকেন্দ্রের তথ্য পাওয়া যায়নি")
                 Text(
                     "ফায়ারবেসে ডেটা যোগ করুন",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -353,7 +353,7 @@ private fun openGoogleMaps(school: School, context: android.content.Context) {
             // Fallback to browser
             val webIntent = Intent(
                 Intent.ACTION_VIEW,
-                Uri.parse("https://www.google.com/maps/search/?api=1&query=${school.latitude},${school.longitude}")
+                "https://www.google.com/maps/search/?api=1&query=${school.latitude},${school.longitude}".toUri()
             )
             context.startActivity(webIntent)
         }

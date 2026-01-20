@@ -78,7 +78,7 @@ fun StatisticsDashboard(
     ) {
         // 1. Total Schools Card
         StatCard(
-            title = "মোট বিদ্যালয়",
+            title = "মোট প্রতিষ্ঠান",
             value = if (isLoading) "..." else allSchools.size.toString(),
             filteredValue = filteredSchools.size.toString(),
             showFiltered = true,
@@ -92,7 +92,7 @@ fun StatisticsDashboard(
 
         // 2. Total Students Card
         StatCard(
-            title = "মোট শিক্ষার্থী",
+            title = "মোট ভোটার",
             value = if (isLoading) "..." else
                 Calculations.calculateTotalStudents(allSchools).toString(),
             filteredValue = Calculations.calculateTotalStudents(filteredSchools).toString(),

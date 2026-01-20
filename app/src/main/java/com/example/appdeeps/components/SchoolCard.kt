@@ -50,7 +50,7 @@ fun SchoolCard(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "বিদ্যালয় নং: ${school.schoolNumber}",
+                        text = "প্রতিষ্ঠান নং: ${school.schoolNumber}",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp

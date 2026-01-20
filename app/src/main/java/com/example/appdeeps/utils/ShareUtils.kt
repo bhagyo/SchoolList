@@ -33,30 +33,32 @@ fun openSchoolInGoogleMaps(
 // Function to share school information
 fun shareSchoolInfo(context: Context, school: School) {
     val shareText = """
-        📚 বিদ্যালয়: ${school.schoolName}
+        📚 প্রতিষ্ঠান: ${school.schoolName}
         🔢 নং: ${school.schoolNumber}
         🏘️ ইউনিয়ন: ${school.unionName}
         
-        👨‍🏫 প্রধান শিক্ষক: ${school.headmasterName}
+        👨‍🏫 প্রিজাইডিং অফিসার: ${school.headmasterName}
         📞 মোবাইল: ${school.headmasterMobile}
         
-        👨‍🏫 সহকারী প্রধান: ${school.asstHeadmasterName}
+        👨‍🏫 সহকারী প্রিজাইডিং অফিসার: ${school.asstHeadmasterName}
         📞 মোবাইল: ${school.asstHeadmasterMobile}
         
+        👨‍🏫 দায়িত্বপ্রাপ্ত পুলিশ: ${school.policeName}
+        📞 মোবাইল: ${school.policeMobile}
+        
         📊 উপস্থিতি: ${school.attendancePercentage}%
-        👦 ছাত্র: ${school.maleStudents} জন
-        👧 ছাত্রী: ${school.femaleStudents} জন
-        👨‍🎓 মোট ছাত্র-ছাত্রী: ${school.totalStudents} জন
+        👦 পুরুষ ভোটার: ${school.maleStudents} জন
+        👧 মহিলা ভোটার: ${school.femaleStudents} জন
         
         📍 অবস্থান: https://maps.google.com/?q=${school.latitude},${school.longitude}
         
-        #উলিপুর_বিদ্যালয়_মনিটরিং
+        #উলিপুর_ভোটকেন্দ্র_মনিটরিং
     """.trimIndent()
 
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, shareText)
-        putExtra(Intent.EXTRA_SUBJECT, "${school.schoolName} - বিদ্যালয় তথ্য")
+        putExtra(Intent.EXTRA_SUBJECT, "${school.schoolName} - ভোটকেন্দ্র তথ্য")
     }
 
     context.startActivity(Intent.createChooser(intent, "তথ্য শেয়ার করুন"))

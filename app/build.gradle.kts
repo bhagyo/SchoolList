@@ -70,6 +70,10 @@ dependencies {
     // If you also need navigation animation:
     implementation("com.google.accompanist:accompanist-navigation-animation:0.32.0")
 
+    // SharedPreferences
+    implementation("com.google.code.gson:gson:2.10.1")  // For JSON serialization
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.32.0")  // Pull-to-refresh
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

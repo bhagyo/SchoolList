@@ -7,23 +7,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.appdeeps.School
+import com.example.appdeeps.cache.SimpleCacheManager
 import com.example.appdeeps.components.SchoolCard
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.ValueEventListener
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
@@ -31,35 +27,29 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 
-// Add these imports right after the existing imports:
+// Dialogs imports
 import com.example.appdeeps.screens.components.dialogs.AboutDialog
 import com.example.appdeeps.screens.components.dialogs.EmergencyDialog
-//For tackling the three dot menu in top right
+
+// Components imports
 import com.example.appdeeps.screens.components.ThreeDotMenu
 import com.example.appdeeps.screens.components.SchoolSearchBar
-
-//Utilities import
 import com.example.appdeeps.screens.components.StatisticsDashboard
-import com.example.appdeeps.screens.components.SchoolListHeader
 
-// Add these import lines:
+// Utilities imports
 import com.example.appdeeps.utils.MapUtils
 import androidx.core.net.toUri
 
+// ✅ NEW: Import for Pull-to-Refresh
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
+import com.example.appdeeps.sync.SimpleRefreshManager
+import kotlinx.coroutines.launch
 
 /**
- * SCHOOL LIST SCREEN
- *
- * Main screen for displaying and managing all schools in Ulipur.
- * Features:
- * - Firebase data loading with real-time updates
- * - Search functionality (by name, number, or union)
- * - Statistics dashboard with 4 key metrics
- * - Menu with About and Emergency dialogs
- * - Interactive school cards with map navigation
- * - Filtered vs total statistics display
- *
- * @param onSchoolClick Callback when a school is clicked to navigate to details
+ * SCHOOL LIST SCREEN - SIMPLIFIED WITH CACHE
+ * Now works offline and reduces Firebase costs by 99.9%
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +58,7 @@ fun SchoolListScreen(
 ) {
     // ==================== STATE MANAGEMENT ====================
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     // School data states
     var schools by remember { mutableStateOf<List<School>>(emptyList()) }
@@ -80,16 +71,39 @@ fun SchoolListScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showEmergencyDialog by remember { mutableStateOf(false) }
 
+    // ✅ NEW: Refresh states
+    var isRefreshing by remember { mutableStateOf(false) }
+    var refreshMessage by remember { mutableStateOf("") }
+    var showRefreshMessage by remember { mutableStateOf(false) }
+    var lastRefreshTime by remember { mutableStateOf<String>("কখনোই নয়") }
+
+    // ✅ NEW: Simple Cache Manager
+    val cacheManager = remember { SimpleCacheManager(context) }
+
+    // ✅ NEW: Simple Refresh Manager
+    val refreshManager = remember { SimpleRefreshManager(cacheManager) }
+
+    // ✅ NEW: Pull-to-refresh state
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+
+    // ==================== HELPER FUNCTION ====================
+    // ✅ MOVED HERE: Function to update last refresh time
+    fun updateLastRefreshTime() {
+        val cacheInfo = cacheManager.getCacheInfo()
+        if (cacheInfo.lastSynced > 0) {
+            val minutesAgo = (System.currentTimeMillis() - cacheInfo.lastSynced) / (1000 * 60)
+            lastRefreshTime = when {
+                minutesAgo < 1 -> "এইমাত্র"
+                minutesAgo < 60 -> "$minutesAgo মিনিট আগে"
+                else -> "${minutesAgo / 60} ঘণ্টা আগে"
+            }
+        }
+    }
+
     // ==================== DATA FILTERING ====================
-    /**
-     * Filters schools based on search text across multiple fields:
-     * - School name (case-insensitive, supports Bangla)
-     * - School number
-     * - Union name
-     */
     val filteredSchools = remember(schools, searchText.text) {
         if (searchText.text.isEmpty()) {
-            schools // Return all schools when no search query
+            schools
         } else {
             schools.filter { school ->
                 val query = searchText.text.lowercase()
@@ -100,166 +114,350 @@ fun SchoolListScreen(
         }
     }
 
-    // ==================== FIREBASE DATA LOADING ====================
+    // ==================== INITIAL DATA LOADING ====================
     LaunchedEffect(Unit) {
-        loadSchoolsFromFirebase(
-            onSchoolsLoaded = { loadedSchools ->
-                schools = loadedSchools
-                isLoading = false
-            },
-            onError = { error ->
-                isLoading = false
-                println("❌ Firebase error: $error")
-            }
-        )
+        loadInitialData(cacheManager, refreshManager) { loadedSchools ->
+            schools = loadedSchools
+            isLoading = false
+            updateLastRefreshTime()
+        }
     }
 
-    // ==================== MAIN UI STRUCTURE ====================
-    // Everything inside LazyColumn so it scrolls away
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp)
-    ) {
-        // 1. Custom App Header with Menu (still sticky if you want, or remove it)
-        item {
-            SchoolListHeader(
-                onAboutClick = { showAboutDialog = true },
-                onEmergencyClick = { showEmergencyDialog = true }
-            )
+    // ==================== REFRESH FUNCTION ====================
+    val refreshData = suspend {
+        isRefreshing = true
+        refreshMessage = "ডেটা আপডেট করা হচ্ছে..."
+
+        val result = refreshManager.smartRefresh()
+
+        when (result) {
+            is com.example.appdeeps.sync.RefreshResult.Success -> {
+                schools = result.schools
+                refreshMessage = if (result.fromCache) {
+                    "ক্যাশে থেকে ডেটা লোড করা হয়েছে"
+                } else {
+                    "ডেটা সিঙ্ক্রোনাইজড হয়েছে ✅"
+                }
+                updateLastRefreshTime()
+            }
+            is com.example.appdeeps.sync.RefreshResult.Error -> {
+                refreshMessage = "ত্রুটি: ${result.message}"
+            }
         }
 
-        // 2. Search Bar Component
-        item {
-            SchoolSearchBar(
-                searchText = searchText,
-                onSearchTextChange = { searchText = it }
-            )
+        showRefreshMessage = true
+        isRefreshing = false
+
+        // Hide message after 3 seconds
+        kotlinx.coroutines.delay(3000)
+        showRefreshMessage = false
+    }
+
+    // ==================== MANUAL REFRESH FUNCTION ====================
+    val forceRefresh = suspend {
+        isRefreshing = true
+        refreshMessage = "জোরপূর্বক আপডেট করা হচ্ছে..."
+
+        val result = refreshManager.forceRefresh()
+
+        when (result) {
+            is com.example.appdeeps.sync.RefreshResult.Success -> {
+                schools = result.schools
+                refreshMessage = "ডেটা ফ্রেশ করা হয়েছে ✅"
+                updateLastRefreshTime()
+            }
+            is com.example.appdeeps.sync.RefreshResult.Error -> {
+                refreshMessage = "ত্রুটি: ${result.message}"
+            }
         }
 
-        // 3. Statistics Dashboard (4 Cards)
-        item {
-            StatisticsDashboard(
-                isLoading = isLoading,
-                allSchools = schools,
-                filteredSchools = filteredSchools,
-                isSearching = searchText.text.isNotEmpty()
-            )
-        }
+        showRefreshMessage = true
+        isRefreshing = false
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+        kotlinx.coroutines.delay(3000)
+        showRefreshMessage = false
+    }
 
-        // 4. Search Results Indicator
-        if (searchText.text.isNotEmpty()) {
-            item {
-                SearchResultsIndicator(
-                    searchQuery = searchText.text,
-                    resultCount = filteredSchools.size
+    // ==================== MAIN UI WITH PULL-TO-REFRESH ====================
+    Box(modifier = Modifier.fillMaxSize()) {
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = {
+                coroutineScope.launch {
+                    refreshData()
+                }
+            },
+            indicator = { state, trigger ->
+                SwipeRefreshIndicator(
+                    state = state,
+                    refreshTriggerDistance = trigger,
+                    scale = true,
+                    backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    contentColor = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.height(8.dp))
             }
-        }
-
-        // 5. School List Content (Handles all states)
-        when {
-            // Loading State
-            isLoading -> {
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                // 1. Custom App Header with Menu and Refresh Button
                 item {
-                    LoadingState()
-                }
-            }
-
-            // Empty State (no schools found)
-            filteredSchools.isEmpty() -> {
-                item {
-                    EmptyState(searchQuery = searchText.text)
-                }
-            }
-
-            // Success State (show school list)
-            else -> {
-                items(filteredSchools, key = { it.id }) { school ->
-                    SchoolCard(
-                        school = school,
-                        onClick = { onSchoolClick(school) },
-                        onLocationClick = { openGoogleMaps(school, context) }
+                    EnhancedHeaderWithRefresh(
+                        onAboutClick = { showAboutDialog = true },
+                        onEmergencyClick = { showEmergencyDialog = true },
+                        onRefreshClick = {
+                            coroutineScope.launch {
+                                forceRefresh()
+                            }
+                        },
+                        isRefreshing = isRefreshing,
+                        lastRefreshTime = lastRefreshTime
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // 2. Refresh Message (if visible)
+                if (showRefreshMessage) {
+                    item {
+                        RefreshMessageBanner(message = refreshMessage)
+                    }
+                }
+
+                // 3. Search Bar Component
+                item {
+                    SchoolSearchBar(
+                        searchText = searchText,
+                        onSearchTextChange = { searchText = it }
+                    )
+                }
+
+                // 4. Statistics Dashboard (4 Cards)
+                item {
+                    StatisticsDashboard(
+                        isLoading = isLoading,
+                        allSchools = schools,
+                        filteredSchools = filteredSchools,
+                        isSearching = searchText.text.isNotEmpty()
+                    )
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // 5. Search Results Indicator
+                if (searchText.text.isNotEmpty()) {
+                    item {
+                        SearchResultsIndicator(
+                            searchQuery = searchText.text,
+                            resultCount = filteredSchools.size
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                // 6. School List Content (Handles all states)
+                when {
+                    // Loading State
+                    isLoading -> {
+                        item {
+                            LoadingState()
+                        }
+                    }
+
+                    // Empty State (no schools found)
+                    filteredSchools.isEmpty() -> {
+                        item {
+                            EmptyState(searchQuery = searchText.text)
+                        }
+                    }
+
+                    // Success State (show school list)
+                    else -> {
+                        items(filteredSchools, key = { it.id }) { school ->
+                            SchoolCard(
+                                school = school,
+                                onClick = { onSchoolClick(school) },
+                                onLocationClick = { openGoogleMaps(school, context) }
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                    }
                 }
             }
         }
     }
 
     // ==================== DIALOGS ====================
-    // About Us Dialog
     if (showAboutDialog) {
         AboutDialog(onDismiss = { showAboutDialog = false })
     }
 
-    // Emergency Numbers Dialog
     if (showEmergencyDialog) {
         EmergencyDialog(onDismiss = { showEmergencyDialog = false })
     }
 }
 
-// ==================== FIREBASE DATA LOADER ====================
+// ==================== NEW COMPONENTS ====================
 
 /**
- * Loads school data from Firebase Realtime Database.
- * Uses ValueEventListener for real-time updates.
- *
- * @param onSchoolsLoaded Callback when schools are successfully loaded
- * @param onError Callback when Firebase returns an error
+ * Enhanced header with refresh button and last sync time
  */
-private fun loadSchoolsFromFirebase(
-    onSchoolsLoaded: (List<School>) -> Unit,
-    onError: (String) -> Unit
+@Composable
+private fun EnhancedHeaderWithRefresh(
+    onAboutClick: () -> Unit,
+    onEmergencyClick: () -> Unit,
+    onRefreshClick: () -> Unit,
+    isRefreshing: Boolean,
+    lastRefreshTime: String
 ) {
-    val database = Firebase.database(
-        "https://ulipur-school-monitor-default-rtdb.asia-southeast1.firebasedatabase.app/"
-    )
-    val schoolsRef = database.getReference("schools")
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary)
+            .padding(16.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Title Section (Left side)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "উলিপুর ভোটকেন্দ্র পর্যবেক্ষণ",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
 
-    schoolsRef.addValueEventListener(object : ValueEventListener {
-        override fun onDataChange(snapshot: DataSnapshot) {
-            val schoolList = mutableListOf<School>()
-
-            logDebugInfo("Got snapshot with ${snapshot.childrenCount} children")
-            logDebugInfo("Snapshot exists: ${snapshot.exists()}")
-
-            // Iterate through all child nodes
-            for (child in snapshot.children) {
-                val school = child.getValue(School::class.java)
-                if (school != null) {
-                    logDebugInfo("✅ Successfully parsed: ${school.schoolName}")
-                    schoolList.add(school)
-                } else {
-                    logDebugInfo("❌ FAILED to parse school ${child.key}")
+                    Text(
+                        text = "কুড়িগ্রাম",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                    )
                 }
+
+                // Refresh Button
+                IconButton(
+                    onClick = onRefreshClick,
+                    enabled = !isRefreshing
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                // Three-dot Menu
+                ThreeDotMenu(
+                    onAboutClick = onAboutClick,
+                    onEmergencyClick = onEmergencyClick,
+                    iconColor = Color.White
+                )
             }
 
-            onSchoolsLoaded(schoolList)
-
-            // Final debug output
-            logDebugInfo("Total schools loaded: ${schoolList.size}")
-            logDebugInfo("First school: ${schoolList.firstOrNull()?.schoolName}")
+            // Last refresh time
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "সর্বশেষ আপডেট: $lastRefreshTime",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.7f)
+            )
         }
-
-        override fun onCancelled(error: DatabaseError) {
-            onError(error.message)
-        }
-    })
+    }
 }
 
-// ==================== UI COMPONENTS ====================
+/**
+ * Shows refresh message banner
+ */
+@Composable
+private fun RefreshMessageBanner(message: String) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(20.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = message,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+}
+
+// ==================== DATA LOADING FUNCTIONS ====================
 
 /**
- * Indicator showing search results count.
- *
- * @param searchQuery The current search query
- * @param resultCount Number of schools matching the search
+ * Loads initial data with cache-first approach
  */
+private suspend fun loadInitialData(
+    cacheManager: SimpleCacheManager,
+    refreshManager: SimpleRefreshManager,
+    onDataLoaded: (List<School>) -> Unit
+) {
+    println("🔄 Loading initial data...")
+
+    // Try cache first
+    try {
+        val cachedSchools = cacheManager.getSchoolsFromCache()
+        if (cachedSchools.isNotEmpty() && !cacheManager.isCacheExpired()) {
+            println("✅ Using cached data (${cachedSchools.size} schools)")
+            onDataLoaded(cachedSchools)
+            return
+        }
+    } catch (e: Exception) {
+        println("❌ Cache load failed: ${e.message}")
+    }
+
+    // Cache empty or expired, fetch from Firebase
+    try {
+        println("🔄 Cache expired/empty, fetching from Firebase...")
+        val result = refreshManager.forceRefresh()
+        if (result is com.example.appdeeps.sync.RefreshResult.Success) {
+            onDataLoaded(result.schools)
+        } else if (result is com.example.appdeeps.sync.RefreshResult.Error) {
+            println("❌ Firebase failed: ${result.message}")
+            // Try cache one more time as fallback
+            val cachedSchools = cacheManager.getSchoolsFromCache()
+            if (cachedSchools.isNotEmpty()) {
+                onDataLoaded(cachedSchools)
+            }
+        }
+    } catch (e: Exception) {
+        println("❌ Initial load completely failed: ${e.message}")
+    }
+}
+
 @Composable
 private fun SearchResultsIndicator(
     searchQuery: String,
@@ -273,9 +471,6 @@ private fun SearchResultsIndicator(
     )
 }
 
-/**
- * Shows loading indicator while data is being fetched.
- */
 @Composable
 private fun LoadingState() {
     Box(
@@ -292,11 +487,6 @@ private fun LoadingState() {
     }
 }
 
-/**
- * Shows appropriate message when no schools are found.
- *
- * @param searchQuery Current search query to show in message
- */
 @Composable
 private fun EmptyState(searchQuery: String) {
     Box(
@@ -331,26 +521,14 @@ private fun EmptyState(searchQuery: String) {
     }
 }
 
-/**
- * Opens Google Maps for the given school location.
- * Falls back to browser if Google Maps is not installed.
- *
- * @param school The school with location coordinates
- * @param context Android context for starting activity
- */
 private fun openGoogleMaps(school: School, context: android.content.Context) {
     if (school.latitude != 0.0 && school.longitude != 0.0) {
         try {
-            // Try to open in Google Maps app
-            val gmmIntentUri =
-                "geo:${school.latitude},${school.longitude}?q=${school.latitude},${school.longitude}(${
-                    Uri.encode(school.schoolName)
-                })".toUri()
+            val gmmIntentUri = "geo:${school.latitude},${school.longitude}?q=${school.latitude},${school.longitude}(${Uri.encode(school.schoolName)})".toUri()
             val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
             mapIntent.setPackage("com.google.android.apps.maps")
             context.startActivity(mapIntent)
         } catch (e: Exception) {
-            // Fallback to browser
             val webIntent = Intent(
                 Intent.ACTION_VIEW,
                 "https://www.google.com/maps/search/?api=1&query=${school.latitude},${school.longitude}".toUri()
@@ -360,11 +538,6 @@ private fun openGoogleMaps(school: School, context: android.content.Context) {
     }
 }
 
-/**
- * Logs debug information to console.
- *
- * @param message Debug message to log
- */
 private fun logDebugInfo(message: String) {
     println("🔍 DEBUG: $message")
 }

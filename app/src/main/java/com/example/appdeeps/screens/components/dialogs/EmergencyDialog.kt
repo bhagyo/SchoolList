@@ -10,8 +10,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * EMERGENCY DIALOG - Shows emergency contact numbers
- *
  * This dialog appears when user clicks "Emergency Numbers" in the menu
  */
 @Composable

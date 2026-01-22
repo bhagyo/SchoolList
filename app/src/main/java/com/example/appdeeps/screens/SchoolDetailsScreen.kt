@@ -154,8 +154,8 @@ private fun StatusCard(school: School) {
             Column {
                 Text(
                     text = when (school.schoolStatus) {
-                        "good" -> "ভাল বিদ্যালয়"
-                        "normal" -> "মধ্যম মানের বিদ্যালয়"
+                        "good" -> "ভাল"
+                        "normal" -> "মধ্যম"
                         else -> "সহায়তা প্রয়োজন"
                     },
                     fontSize = 18.sp,
@@ -163,7 +163,7 @@ private fun StatusCard(school: School) {
                     color = Color.White
                 )
                 Text(
-                    text = "বিদ্যালয়ের অবস্থা",
+                    text = "ভোটকেন্দ্র অবস্থা",
                     color = Color.White.copy(alpha = 0.8f)
                 )
             }
@@ -179,8 +179,8 @@ private fun StatusCard(school: School) {
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
                     color = when {
-                        school.attendancePercentage >= 90 -> Color(0xFF4CAF50)
-                        school.attendancePercentage >= 70 -> Color(0xFF2196F3)
+                        school.attendancePercentage >= 60 -> Color(0xFF4CAF50)
+                        school.attendancePercentage >= 40 -> Color(0xFF2196F3)
                         else -> Color(0xFFF44336)
                     }
                 )

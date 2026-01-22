@@ -5,8 +5,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.font.FontWeight
 
 /**
- * ABOUT DIALOG - Simple popup showing app information
- *
  * This dialog appears when user clicks "About" in the three-dot menu
  */
 @Composable

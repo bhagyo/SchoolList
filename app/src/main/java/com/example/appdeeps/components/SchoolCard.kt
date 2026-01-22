@@ -65,8 +65,8 @@ fun SchoolCard(
                         .clip(RoundedCornerShape(8.dp))
                         .background(
                             when {
-                                school.attendancePercentage >= 90 -> Color(0xFF4CAF50)
-                                school.attendancePercentage >= 70 -> Color(0xFF2196F3)
+                                school.attendancePercentage >= 60 -> Color(0xFF4CAF50)
+                                school.attendancePercentage >= 40 -> Color(0xFF2196F3)
                                 else -> Color(0xFFF44336)
                             }
                         )

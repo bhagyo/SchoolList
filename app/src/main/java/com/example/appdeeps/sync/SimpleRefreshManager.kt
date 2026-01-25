@@ -2,15 +2,19 @@ package com.example.appdeeps.sync
 
 import com.example.appdeeps.School
 import com.example.appdeeps.cache.SimpleCacheManager
+import com.example.appdeeps.cache.SyncCooldownManager
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 
 /**
- * SIMPLE REFRESH MANAGER
- * Handles Firebase sync and caching
+ * SIMPLE REFRESH MANAGER WITH COOLDOWN
+ * Handles Firebase sync with 30-minute cooldown
  */
-class SimpleRefreshManager(private val cacheManager: SimpleCacheManager) {
+class SimpleRefreshManager(
+    private val cacheManager: SimpleCacheManager,
+    private val cooldownManager: SyncCooldownManager  // Add cooldown manager
+) {
 
     private val firebaseDatabase = Firebase.database(
         "https://ulipur-school-monitor-default-rtdb.asia-southeast1.firebasedatabase.app/"
@@ -19,10 +23,11 @@ class SimpleRefreshManager(private val cacheManager: SimpleCacheManager) {
 
     /**
      * Smart refresh: Uses cache if valid, otherwise fetches from Firebase
+     * Now includes cooldown check
      */
     suspend fun smartRefresh(): RefreshResult {
         return try {
-            // If cache is valid, use it
+            // Check if cache is expired and cooldown allows sync
             if (!cacheManager.isCacheExpired()) {
                 val cachedSchools = cacheManager.getSchoolsFromCache()
                 if (cachedSchools.isNotEmpty()) {
@@ -32,6 +37,14 @@ class SimpleRefreshManager(private val cacheManager: SimpleCacheManager) {
                         fromCache = true
                     )
                 }
+            }
+
+            // Check cooldown before syncing with Firebase
+            if (!cooldownManager.canSyncSchools()) {
+                return RefreshResult.Cooldown(
+                    message = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। ${cooldownManager.getSchoolSyncCooldownMinutes()} মিনিট অপেক্ষা করুন।",
+                    minutesRemaining = cooldownManager.getSchoolSyncCooldownMinutes()
+                )
             }
 
             // Cache expired or empty, fetch from Firebase
@@ -47,10 +60,19 @@ class SimpleRefreshManager(private val cacheManager: SimpleCacheManager) {
 
     /**
      * Force refresh from Firebase (ignores cache)
+     * Now updates cooldown timer
      */
     suspend fun forceRefresh(): RefreshResult {
         return try {
             println("🔄 Fetching data from Firebase...")
+
+            // Check cooldown first
+            if (!cooldownManager.canSyncSchools()) {
+                return RefreshResult.Cooldown(
+                    message = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। ${cooldownManager.getSchoolSyncCooldownMinutes()} মিনিট অপেক্ষা করুন।",
+                    minutesRemaining = cooldownManager.getSchoolSyncCooldownMinutes()
+                )
+            }
 
             // Get data from Firebase
             val snapshot = schoolsRef.get().await()
@@ -65,6 +87,9 @@ class SimpleRefreshManager(private val cacheManager: SimpleCacheManager) {
 
             // Save to cache
             cacheManager.saveSchoolsToCache(schoolList)
+
+            // Update cooldown timer
+            cooldownManager.updateSchoolSyncTime()
 
             RefreshResult.Success(
                 message = "ডেটা সিঙ্ক্রোনাইজড হয়েছে ✅",
@@ -91,10 +116,24 @@ class SimpleRefreshManager(private val cacheManager: SimpleCacheManager) {
             )
         }
     }
+
+    /**
+     * Check if sync is currently allowed
+     */
+    suspend fun isSyncAllowed(): Boolean {
+        return cooldownManager.canSyncSchools()
+    }
+
+    /**
+     * Get remaining cooldown minutes
+     */
+    suspend fun getRemainingCooldownMinutes(): Long {
+        return cooldownManager.getSchoolSyncCooldownMinutes()
+    }
 }
 
 /**
- * Refresh result sealed class
+ * Refresh result sealed class with Cooldown state
  */
 sealed class RefreshResult {
     data class Success(
@@ -106,5 +145,10 @@ sealed class RefreshResult {
     data class Error(
         val message: String,
         val error: Exception
+    ) : RefreshResult()
+
+    data class Cooldown(
+        val message: String,
+        val minutesRemaining: Long
     ) : RefreshResult()
 }

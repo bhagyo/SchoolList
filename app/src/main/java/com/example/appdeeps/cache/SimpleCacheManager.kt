@@ -7,6 +7,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.core.content.edit
 
 /**
  * SIMPLE CACHE MANAGER
@@ -28,10 +29,17 @@ class SimpleCacheManager(private val context: Context) {
     }
 
     /**
+     * Get last sync time from SharedPreferences
+     */
+    private fun getLastSyncTime(): Long {
+        return sharedPrefs.getLong(KEY_LAST_SYNC_TIME, 0)
+    }
+
+    /**
      * Check if cache is expired (older than 24 hours)
      */
     fun isCacheExpired(): Boolean {
-        val lastSync = sharedPrefs.getLong(KEY_LAST_SYNC_TIME, 0)
+        val lastSync = getLastSyncTime()
         if (lastSync == 0L) return true  // Never synced
 
         val currentTime = System.currentTimeMillis()
@@ -47,10 +55,10 @@ class SimpleCacheManager(private val context: Context) {
         withContext(Dispatchers.IO) {
             try {
                 val jsonString = gson.toJson(schools)
-                sharedPrefs.edit()
-                    .putString(KEY_SCHOOLS_CACHE, jsonString)
-                    .putLong(KEY_LAST_SYNC_TIME, System.currentTimeMillis())
-                    .apply()
+                sharedPrefs.edit {
+                    putString(KEY_SCHOOLS_CACHE, jsonString)
+                    putLong(KEY_LAST_SYNC_TIME, System.currentTimeMillis())
+                }
 
                 println("✅ Cached ${schools.size} schools successfully")
             } catch (e: Exception) {
@@ -86,7 +94,7 @@ class SimpleCacheManager(private val context: Context) {
      * Clear cache
      */
     fun clearCache() {
-        sharedPrefs.edit().clear().apply()
+        sharedPrefs.edit { clear() }
         println("✅ Cache cleared")
     }
 
@@ -94,7 +102,7 @@ class SimpleCacheManager(private val context: Context) {
      * Get cache info
      */
     fun getCacheInfo(): CacheInfo {
-        val lastSync = sharedPrefs.getLong(KEY_LAST_SYNC_TIME, 0)
+        val lastSync = getLastSyncTime()
         val jsonString = sharedPrefs.getString(KEY_SCHOOLS_CACHE, "")
         val hasCache = !jsonString.isNullOrEmpty()
 
@@ -110,9 +118,35 @@ class SimpleCacheManager(private val context: Context) {
      */
     fun expireCache() {
         val expiredTime = System.currentTimeMillis() - (CACHE_DURATION_HOURS + 1) * 60 * 60 * 1000
-        sharedPrefs.edit()
-            .putLong(KEY_LAST_SYNC_TIME, expiredTime)
-            .apply()
+        sharedPrefs.edit {
+            putLong(KEY_LAST_SYNC_TIME, expiredTime)
+        }
+    }
+
+    suspend fun getSyncCooldownInfo(): SyncCooldownInfo {
+        val lastSync = getLastSyncTime()
+        val currentTime = System.currentTimeMillis()
+
+        return if (lastSync == 0L) {
+            SyncCooldownInfo(
+                canSync = true,
+                minutesRemaining = 0L,
+                lastSyncTime = 0L
+            )
+        } else {
+            val minutesPassed = (currentTime - lastSync) / (1000 * 60)
+            val minutesRemaining = CACHE_DURATION_HOURS * 60 - minutesPassed
+
+            // Fixed: Explicitly convert to Long for comparison
+            val canSync = minutesRemaining <= 0
+            val finalMinutesRemaining = if (minutesRemaining < 0) 0L else minutesRemaining
+
+            SyncCooldownInfo(
+                canSync = canSync,
+                minutesRemaining = finalMinutesRemaining,
+                lastSyncTime = lastSync
+            )
+        }
     }
 }
 
@@ -123,4 +157,10 @@ data class CacheInfo(
     val hasData: Boolean,
     val lastSynced: Long,
     val isExpired: Boolean
+)
+
+data class SyncCooldownInfo(
+    val canSync: Boolean,
+    val minutesRemaining: Long,
+    val lastSyncTime: Long
 )

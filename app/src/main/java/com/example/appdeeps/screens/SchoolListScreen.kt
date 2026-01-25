@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,13 +20,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.appdeeps.School
 import com.example.appdeeps.cache.SimpleCacheManager
+import com.example.appdeeps.cache.SyncCooldownManager
 import com.example.appdeeps.components.SchoolCard
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LinearProgressIndicator
 
 // Dialogs imports
 import com.example.appdeeps.screens.components.dialogs.AboutDialog
@@ -48,8 +52,9 @@ import com.example.appdeeps.sync.SimpleRefreshManager
 import kotlinx.coroutines.launch
 
 /**
- * SCHOOL LIST SCREEN - SIMPLIFIED WITH CACHE
+ * SCHOOL LIST SCREEN - SIMPLIFIED WITH CACHE & 30-MINUTE COOLDOWN
  * Now works offline and reduces Firebase costs by 99.9%
+ * Prevents excessive syncing with 30-minute cooldown
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,11 +82,19 @@ fun SchoolListScreen(
     var showRefreshMessage by remember { mutableStateOf(false) }
     var lastRefreshTime by remember { mutableStateOf<String>("কখনোই নয়") }
 
+    // ✅ NEW: Cooldown states
+    var cooldownMessage by remember { mutableStateOf("") }
+    var showCooldownMessage by remember { mutableStateOf(false) }
+    var remainingCooldownMinutes by remember { mutableStateOf(0L) }
+
     // ✅ NEW: Simple Cache Manager
     val cacheManager = remember { SimpleCacheManager(context) }
 
-    // ✅ NEW: Simple Refresh Manager
-    val refreshManager = remember { SimpleRefreshManager(cacheManager) }
+    // ✅ NEW: Sync Cooldown Manager (30-minute cooldown)
+    val cooldownManager = remember { SyncCooldownManager(context) }
+
+    // ✅ UPDATED: Simple Refresh Manager with cooldown manager
+    val refreshManager = remember { SimpleRefreshManager(cacheManager, cooldownManager) }
 
     // ✅ NEW: Pull-to-refresh state
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
@@ -123,7 +136,7 @@ fun SchoolListScreen(
         }
     }
 
-    // ==================== REFRESH FUNCTION ====================
+    // ==================== REFRESH FUNCTION WITH COOLDOWN ====================
     val refreshData = suspend {
         isRefreshing = true
         refreshMessage = "ডেটা আপডেট করা হচ্ছে..."
@@ -143,39 +156,71 @@ fun SchoolListScreen(
             is com.example.appdeeps.sync.RefreshResult.Error -> {
                 refreshMessage = "ত্রুটি: ${result.message}"
             }
+            // ✅ NEW: Handle cooldown state
+            is com.example.appdeeps.sync.RefreshResult.Cooldown -> {
+                cooldownMessage = result.message
+                remainingCooldownMinutes = result.minutesRemaining
+                showCooldownMessage = true
+            }
         }
 
-        showRefreshMessage = true
+        // Only show refresh message if not in cooldown
+        if (result !is com.example.appdeeps.sync.RefreshResult.Cooldown) {
+            showRefreshMessage = true
+        }
         isRefreshing = false
 
-        // Hide message after 3 seconds
+        // Hide messages after 3 seconds
         kotlinx.coroutines.delay(3000)
         showRefreshMessage = false
+        showCooldownMessage = false
     }
 
-    // ==================== MANUAL REFRESH FUNCTION ====================
+    // ==================== MANUAL REFRESH FUNCTION WITH COOLDOWN ====================
     val forceRefresh = suspend {
-        isRefreshing = true
-        refreshMessage = "জোরপূর্বক আপডেট করা হচ্ছে..."
+        // Check cooldown first
+        val canSync = refreshManager.isSyncAllowed()
+        if (!canSync) {
+            remainingCooldownMinutes = refreshManager.getRemainingCooldownMinutes()
+            cooldownMessage = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। $remainingCooldownMinutes মিনিট অপেক্ষা করুন।"
+            showCooldownMessage = true
+            isRefreshing = false
 
-        val result = refreshManager.forceRefresh()
+            // Hide message after 5 seconds
+            kotlinx.coroutines.delay(5000)
+            showCooldownMessage = false
+        } else {
+            isRefreshing = true
+            refreshMessage = "জোরপূর্বক আপডেট করা হচ্ছে..."
 
-        when (result) {
-            is com.example.appdeeps.sync.RefreshResult.Success -> {
-                schools = result.schools
-                refreshMessage = "ডেটা ফ্রেশ করা হয়েছে ✅"
-                updateLastRefreshTime()
+            val result = refreshManager.forceRefresh()
+
+            when (result) {
+                is com.example.appdeeps.sync.RefreshResult.Success -> {
+                    schools = result.schools
+                    refreshMessage = "ডেটা ফ্রেশ করা হয়েছে ✅"
+                    updateLastRefreshTime()
+                }
+                is com.example.appdeeps.sync.RefreshResult.Error -> {
+                    refreshMessage = "ত্রুটি: ${result.message}"
+                }
+                is com.example.appdeeps.sync.RefreshResult.Cooldown -> {
+                    cooldownMessage = result.message
+                    remainingCooldownMinutes = result.minutesRemaining
+                    showCooldownMessage = true
+                }
             }
-            is com.example.appdeeps.sync.RefreshResult.Error -> {
-                refreshMessage = "ত্রুটি: ${result.message}"
+
+            // Only show refresh message if not in cooldown
+            if (result !is com.example.appdeeps.sync.RefreshResult.Cooldown) {
+                showRefreshMessage = true
             }
+            isRefreshing = false
+
+            kotlinx.coroutines.delay(3000)
+            showRefreshMessage = false
+            showCooldownMessage = false
         }
-
-        showRefreshMessage = true
-        isRefreshing = false
-
-        kotlinx.coroutines.delay(3000)
-        showRefreshMessage = false
     }
 
     // ==================== MAIN UI WITH PULL-TO-REFRESH ====================
@@ -212,7 +257,10 @@ fun SchoolListScreen(
                             }
                         },
                         isRefreshing = isRefreshing,
-                        lastRefreshTime = lastRefreshTime
+                        lastRefreshTime = lastRefreshTime,
+                        // ✅ NEW: Pass cooldown status to header
+                        isCooldownActive = remainingCooldownMinutes > 0,
+                        remainingMinutes = remainingCooldownMinutes
                     )
                 }
 
@@ -220,6 +268,16 @@ fun SchoolListScreen(
                 if (showRefreshMessage) {
                     item {
                         RefreshMessageBanner(message = refreshMessage)
+                    }
+                }
+
+                // ✅ NEW: Cooldown Message (if visible)
+                if (showCooldownMessage) {
+                    item {
+                        CooldownMessageBanner(
+                            message = cooldownMessage,
+                            minutesRemaining = remainingCooldownMinutes
+                        )
                     }
                 }
 
@@ -253,6 +311,29 @@ fun SchoolListScreen(
                             resultCount = filteredSchools.size
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                // ✅ ADDED: Test button (remove in production)
+                item {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                cooldownManager.resetCooldown()
+                                refreshMessage = "কুলডাউন রিসেট করা হয়েছে"
+                                showRefreshMessage = true
+                                kotlinx.coroutines.delay(2000)
+                                showRefreshMessage = false
+                            }
+                        },
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF5722)
+                        )
+                    ) {
+                        Text("কুলডাউন রিসেট করুন (টেস্টের জন্য)")
                     }
                 }
 
@@ -309,7 +390,10 @@ private fun EnhancedHeaderWithRefresh(
     onEmergencyClick: () -> Unit,
     onRefreshClick: () -> Unit,
     isRefreshing: Boolean,
-    lastRefreshTime: String
+    lastRefreshTime: String,
+    // ✅ NEW: Cooldown parameters
+    isCooldownActive: Boolean = false,
+    remainingMinutes: Long = 0
 ) {
     Box(
         modifier = Modifier
@@ -338,22 +422,49 @@ private fun EnhancedHeaderWithRefresh(
                     )
                 }
 
-                // Refresh Button
-                IconButton(
-                    onClick = onRefreshClick,
-                    enabled = !isRefreshing
-                ) {
-                    if (isRefreshing) {
+                // ✅ UPDATED: Refresh Button with cooldown indicator
+                Box {
+                    IconButton(
+                        onClick = onRefreshClick,
+                        enabled = !isRefreshing && !isCooldownActive
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else if (isCooldownActive) {
+                            // Show timer icon when cooldown active
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Cooldown",
+                                    tint = Color.White.copy(alpha = 0.5f)
+                                )
+                                Text(
+                                    text = "$remainingMinutes",
+                                    fontSize = 10.sp,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    // ✅ NEW: Show cooldown progress ring
+                    if (isCooldownActive && remainingMinutes > 0) {
+                        val progress = (30 - remainingMinutes).toFloat() / 30
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = Color.White,
+                            progress = { progress },
+                            modifier = Modifier.size(30.dp),
+                            color = Color.White.copy(alpha = 0.3f),
                             strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = Color.White
                         )
                     }
                 }
@@ -411,6 +522,67 @@ private fun RefreshMessageBanner(message: String) {
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )
+        }
+    }
+}
+
+/**
+ * ✅ NEW: Shows cooldown message banner
+ */
+@Composable
+private fun CooldownMessageBanner(
+    message: String,
+    minutesRemaining: Long
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFF9800).copy(alpha = 0.1f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = Color(0xFFFF9800),
+                modifier = Modifier.size(20.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = message,
+                    fontSize = 14.sp,
+                    color = Color(0xFFFF9800)
+                )
+
+                // ✅ NEW: Progress bar showing cooldown progress
+                if (minutesRemaining > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { (30 - minutesRemaining).toFloat() / 30 },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp),
+                        color = Color(0xFFFF9800)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "প্রগতি: ${((30 - minutesRemaining) * 100 / 30)}%",
+                        fontSize = 12.sp,
+                        color = Color(0xFFFF9800).copy(alpha = 0.8f)
+                    )
+                }
+            }
         }
     }
 }

@@ -2,161 +2,136 @@ package com.example.appdeeps.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.example.appdeeps.School
 import com.example.appdeeps.cache.SimpleCacheManager
 import com.example.appdeeps.cache.SyncCooldownManager
 import com.example.appdeeps.components.SchoolCard
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.background
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.LinearProgressIndicator
-
-// Dialogs imports
-import com.example.appdeeps.screens.components.dialogs.AboutDialog
-import com.example.appdeeps.screens.components.dialogs.EmergencyDialog
-
-// Components imports
-import com.example.appdeeps.screens.components.ThreeDotMenu
 import com.example.appdeeps.screens.components.SchoolSearchBar
 import com.example.appdeeps.screens.components.StatisticsDashboard
-
-// Utilities imports
-import com.example.appdeeps.utils.MapUtils
-import androidx.core.net.toUri
-
-// ✅ NEW: Import for Pull-to-Refresh
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
-import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
+import com.example.appdeeps.screens.components.ThreeDotMenu
+import com.example.appdeeps.screens.components.dialogs.AboutDialog
+import com.example.appdeeps.screens.components.dialogs.EmergencyDialog
 import com.example.appdeeps.sync.SimpleRefreshManager
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/**
- * SCHOOL LIST SCREEN - SIMPLIFIED WITH CACHE & 30-MINUTE COOLDOWN
- * Now works offline and reduces Firebase costs by 99.9%
- * Prevents excessive syncing with 30-minute cooldown
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SchoolListScreen(
     onSchoolClick: (School) -> Unit
 ) {
-    // ==================== STATE MANAGEMENT ====================
+    // ------------------ BASIC STATE ------------------
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
-    // School data states
     var schools by remember { mutableStateOf<List<School>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-
-    // Search functionality states
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
 
-    // Dialog visibility states
+    // ------------------ UI STATE ------------------
+    var isRefreshing by remember { mutableStateOf(false) }
+    var showRefreshMessage by remember { mutableStateOf(false) }
+    var refreshMessage by remember { mutableStateOf("") }
+
+    var showCooldownMessage by remember { mutableStateOf(false) }
+    var cooldownMessage by remember { mutableStateOf("") }
+    var remainingCooldownMinutes by remember { mutableStateOf(0L) }
+
+    var lastRefreshTime by remember { mutableStateOf("কখনোই নয়") }
+
     var showAboutDialog by remember { mutableStateOf(false) }
     var showEmergencyDialog by remember { mutableStateOf(false) }
 
-    // ✅ NEW: Refresh states
-    var isRefreshing by remember { mutableStateOf(false) }
-    var refreshMessage by remember { mutableStateOf("") }
-    var showRefreshMessage by remember { mutableStateOf(false) }
-    var lastRefreshTime by remember { mutableStateOf<String>("কখনোই নয়") }
-
-    // ✅ NEW: Cooldown states
-    var cooldownMessage by remember { mutableStateOf("") }
-    var showCooldownMessage by remember { mutableStateOf(false) }
-    var remainingCooldownMinutes by remember { mutableStateOf(0L) }
-
-    // ✅ NEW: Simple Cache Manager
+    // ------------------ MANAGERS ------------------
     val cacheManager = remember { SimpleCacheManager(context) }
-
-    // ✅ NEW: Sync Cooldown Manager (30-minute cooldown)
     val cooldownManager = remember { SyncCooldownManager(context) }
-
-    // ✅ UPDATED: Simple Refresh Manager with cooldown manager
     val refreshManager = remember { SimpleRefreshManager(cacheManager, cooldownManager) }
 
-    // ✅ NEW: Pull-to-refresh state
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    val swipeState = rememberSwipeRefreshState(isRefreshing)
 
-    // ==================== HELPER FUNCTION ====================
-    // ✅ MOVED HERE: Function to update last refresh time
+    // ------------------ HELPERS ------------------
     fun updateLastRefreshTime() {
-        val cacheInfo = cacheManager.getCacheInfo()
-        if (cacheInfo.lastSynced > 0) {
-            val minutesAgo = (System.currentTimeMillis() - cacheInfo.lastSynced) / (1000 * 60)
+        val info = cacheManager.getCacheInfo()
+        if (info.lastSynced > 0) {
+            val mins = (System.currentTimeMillis() - info.lastSynced) / 60000
             lastRefreshTime = when {
-                minutesAgo < 1 -> "এইমাত্র"
-                minutesAgo < 60 -> "$minutesAgo মিনিট আগে"
-                else -> "${minutesAgo / 60} ঘণ্টা আগে"
+                mins < 1 -> "এইমাত্র"
+                mins < 60 -> "$mins মিনিট আগে"
+                else -> "${mins / 60} ঘণ্টা আগে"
             }
         }
     }
 
-    // ==================== DATA FILTERING ====================
-    val filteredSchools = remember(schools, searchText.text) {
-        if (searchText.text.isEmpty()) {
-            schools
-        } else {
-            schools.filter { school ->
-                val query = searchText.text.lowercase()
-                school.schoolName.lowercase().contains(query) ||
-                        school.schoolNumber.contains(query) ||
-                        school.unionName.lowercase().contains(query)
-            }
-        }
-    }
-
-    // ==================== INITIAL DATA LOADING ====================
+    // ------------------ INITIAL LOAD ------------------
     LaunchedEffect(Unit) {
-        loadInitialData(cacheManager, refreshManager) { loadedSchools ->
-            schools = loadedSchools
-            isLoading = false
-            updateLastRefreshTime()
-        }
+        try {
+            val cached = cacheManager.getSchoolsFromCache()
+            if (cached.isNotEmpty() && !cacheManager.isCacheExpired()) {
+                schools = cached
+            } else {
+                val result = refreshManager.forceRefresh()
+                if (result is com.example.appdeeps.sync.RefreshResult.Success) {
+                    schools = result.schools
+                }
+            }
+        } catch (_: Exception) {}
+        isLoading = false
+        updateLastRefreshTime()
     }
 
-    // ==================== REFRESH FUNCTION WITH COOLDOWN ====================
-    val refreshData = suspend {
+    // ------------------ REFRESH LOGIC (FIXED) ------------------
+    suspend fun handleRefresh() {
+        if (isRefreshing) return
         isRefreshing = true
+
+        // COOLDOWN CHECK
+        if (!refreshManager.isSyncAllowed()) {
+            remainingCooldownMinutes = refreshManager.getRemainingCooldownMinutes()
+            cooldownMessage =
+                "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। $remainingCooldownMinutes মিনিট অপেক্ষা করুন।"
+            showCooldownMessage = true
+            isRefreshing = false
+            delay(10000)
+            showCooldownMessage = false
+            return
+        }
+
         refreshMessage = "ডেটা আপডেট করা হচ্ছে..."
+        showRefreshMessage = true
 
-        val result = refreshManager.smartRefresh()
-
-        when (result) {
+        when (val result = refreshManager.forceRefresh()) {
             is com.example.appdeeps.sync.RefreshResult.Success -> {
                 schools = result.schools
-                refreshMessage = if (result.fromCache) {
-                    "ক্যাশে থেকে ডেটা লোড করা হয়েছে"
-                } else {
-                    "ডেটা সিঙ্ক্রোনাইজড হয়েছে ✅"
-                }
+                refreshMessage = "ডেটা সিঙ্ক্রোনাইজড হয়েছে ✅"
                 updateLastRefreshTime()
             }
             is com.example.appdeeps.sync.RefreshResult.Error -> {
                 refreshMessage = "ত্রুটি: ${result.message}"
             }
-            // ✅ NEW: Handle cooldown state
             is com.example.appdeeps.sync.RefreshResult.Cooldown -> {
                 cooldownMessage = result.message
                 remainingCooldownMinutes = result.minutesRemaining
@@ -164,132 +139,60 @@ fun SchoolListScreen(
             }
         }
 
-        // Only show refresh message if not in cooldown
-        if (result !is com.example.appdeeps.sync.RefreshResult.Cooldown) {
-            showRefreshMessage = true
-        }
         isRefreshing = false
-
-        // Hide messages after 3 seconds
-        kotlinx.coroutines.delay(3000)
+        delay(10000)
         showRefreshMessage = false
         showCooldownMessage = false
     }
 
-    // ==================== MANUAL REFRESH FUNCTION WITH COOLDOWN ====================
-    val forceRefresh = suspend {
-        // Check cooldown first
-        val canSync = refreshManager.isSyncAllowed()
-        if (!canSync) {
-            remainingCooldownMinutes = refreshManager.getRemainingCooldownMinutes()
-            cooldownMessage = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। $remainingCooldownMinutes মিনিট অপেক্ষা করুন।"
-            showCooldownMessage = true
-            isRefreshing = false
-
-            // Hide message after 5 seconds
-            kotlinx.coroutines.delay(5000)
-            showCooldownMessage = false
-        } else {
-            isRefreshing = true
-            refreshMessage = "জোরপূর্বক আপডেট করা হচ্ছে..."
-
-            val result = refreshManager.forceRefresh()
-
-            when (result) {
-                is com.example.appdeeps.sync.RefreshResult.Success -> {
-                    schools = result.schools
-                    refreshMessage = "ডেটা ফ্রেশ করা হয়েছে ✅"
-                    updateLastRefreshTime()
-                }
-                is com.example.appdeeps.sync.RefreshResult.Error -> {
-                    refreshMessage = "ত্রুটি: ${result.message}"
-                }
-                is com.example.appdeeps.sync.RefreshResult.Cooldown -> {
-                    cooldownMessage = result.message
-                    remainingCooldownMinutes = result.minutesRemaining
-                    showCooldownMessage = true
-                }
-            }
-
-            // Only show refresh message if not in cooldown
-            if (result !is com.example.appdeeps.sync.RefreshResult.Cooldown) {
-                showRefreshMessage = true
-            }
-            isRefreshing = false
-
-            kotlinx.coroutines.delay(3000)
-            showRefreshMessage = false
-            showCooldownMessage = false
+    // ------------------ FILTER ------------------
+    val filteredSchools = remember(schools, searchText.text) {
+        if (searchText.text.isEmpty()) schools
+        else schools.filter {
+            it.schoolName.contains(searchText.text, true)
         }
     }
 
-    // ==================== MAIN UI WITH PULL-TO-REFRESH ====================
-    Box(modifier = Modifier.fillMaxSize()) {
+    // ------------------ UI ------------------
+    Box(Modifier.fillMaxSize()) {
         SwipeRefresh(
-            state = swipeRefreshState,
-            onRefresh = {
-                coroutineScope.launch {
-                    refreshData()
-                }
-            },
-            indicator = { state, trigger ->
+            state = swipeState,
+            onRefresh = { scope.launch { handleRefresh() } },
+            indicator = { s, t ->
                 SwipeRefreshIndicator(
-                    state = state,
-                    refreshTriggerDistance = trigger,
-                    scale = true,
-                    backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                    contentColor = MaterialTheme.colorScheme.primary
+                    state = s,
+                    refreshTriggerDistance = t,
+                    scale = true
                 )
             }
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                // 1. Custom App Header with Menu and Refresh Button
+            LazyColumn {
                 item {
-                    EnhancedHeaderWithRefresh(
-                        onAboutClick = { showAboutDialog = true },
-                        onEmergencyClick = { showEmergencyDialog = true },
-                        onRefreshClick = {
-                            coroutineScope.launch {
-                                forceRefresh()
-                            }
-                        },
+                    Header(
                         isRefreshing = isRefreshing,
                         lastRefreshTime = lastRefreshTime,
-                        // ✅ NEW: Pass cooldown status to header
-                        isCooldownActive = remainingCooldownMinutes > 0,
-                        remainingMinutes = remainingCooldownMinutes
+                        onRefreshClick = { scope.launch { handleRefresh() } },
+                        onAbout = { showAboutDialog = true },
+                        onEmergency = { showEmergencyDialog = true }
                     )
                 }
 
-                // 2. Refresh Message (if visible)
                 if (showRefreshMessage) {
-                    item {
-                        RefreshMessageBanner(message = refreshMessage)
-                    }
+                    item { MessageBanner(refreshMessage) }
                 }
 
-                // ✅ NEW: Cooldown Message (if visible)
                 if (showCooldownMessage) {
-                    item {
-                        CooldownMessageBanner(
-                            message = cooldownMessage,
-                            minutesRemaining = remainingCooldownMinutes
-                        )
-                    }
+                    item { CooldownBanner(cooldownMessage, remainingCooldownMinutes) }
                 }
 
-                // 3. Search Bar Component
                 item {
                     SchoolSearchBar(
+                        modifier = Modifier.fillMaxWidth(),
                         searchText = searchText,
                         onSearchTextChange = { searchText = it }
                     )
                 }
 
-                // 4. Statistics Dashboard (4 Cards)
                 item {
                     StatisticsDashboard(
                         isLoading = isLoading,
@@ -299,417 +202,113 @@ fun SchoolListScreen(
                     )
                 }
 
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                // 5. Search Results Indicator
-                if (searchText.text.isNotEmpty()) {
-                    item {
-                        SearchResultsIndicator(
-                            searchQuery = searchText.text,
-                            resultCount = filteredSchools.size
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-
-                // ✅ ADDED: Test button (remove in production)
-                item {
-                    Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                cooldownManager.resetCooldown()
-                                refreshMessage = "কুলডাউন রিসেট করা হয়েছে"
-                                showRefreshMessage = true
-                                kotlinx.coroutines.delay(2000)
-                                showRefreshMessage = false
-                            }
-                        },
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF5722)
-                        )
-                    ) {
-                        Text("কুলডাউন রিসেট করুন (টেস্টের জন্য)")
-                    }
-                }
-
-                // 6. School List Content (Handles all states)
                 when {
-                    // Loading State
-                    isLoading -> {
-                        item {
-                            LoadingState()
-                        }
-                    }
-
-                    // Empty State (no schools found)
-                    filteredSchools.isEmpty() -> {
-                        item {
-                            EmptyState(searchQuery = searchText.text)
-                        }
-                    }
-
-                    // Success State (show school list)
-                    else -> {
-                        items(filteredSchools, key = { it.id }) { school ->
-                            SchoolCard(
-                                school = school,
-                                onClick = { onSchoolClick(school) },
-                                onLocationClick = { openGoogleMaps(school, context) }
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
+                    isLoading -> item { LoadingState() }
+                    filteredSchools.isEmpty() -> item { EmptyState(searchText.text) }
+                    else -> items(filteredSchools) { school ->
+                        SchoolCard(
+                            school = school,
+                            onClick = { onSchoolClick(school) },
+                            onLocationClick = { openGoogleMaps(school, context) }
+                        )
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
         }
     }
 
-    // ==================== DIALOGS ====================
-    if (showAboutDialog) {
-        AboutDialog(onDismiss = { showAboutDialog = false })
-    }
-
-    if (showEmergencyDialog) {
-        EmergencyDialog(onDismiss = { showEmergencyDialog = false })
-    }
+    if (showAboutDialog) AboutDialog { showAboutDialog = false }
+    if (showEmergencyDialog) EmergencyDialog { showEmergencyDialog = false }
 }
 
-// ==================== NEW COMPONENTS ====================
+// ------------------ COMPONENTS ------------------
 
-/**
- * Enhanced header with refresh button and last sync time
- */
 @Composable
-private fun EnhancedHeaderWithRefresh(
-    onAboutClick: () -> Unit,
-    onEmergencyClick: () -> Unit,
-    onRefreshClick: () -> Unit,
+private fun Header(
     isRefreshing: Boolean,
     lastRefreshTime: String,
-    // ✅ NEW: Cooldown parameters
-    isCooldownActive: Boolean = false,
-    remainingMinutes: Long = 0
+    onRefreshClick: () -> Unit,
+    onAbout: () -> Unit,
+    onEmergency: () -> Unit
 ) {
     Box(
-        modifier = Modifier
+        Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.primary)
             .padding(16.dp)
     ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Title Section (Left side)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "উলিপুর ভোটকেন্দ্র পর্যবেক্ষণ",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-
-                    Text(
-                        text = "কুড়িগ্রাম",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                    )
-                }
-
-                // ✅ UPDATED: Refresh Button with cooldown indicator
-                Box {
-                    IconButton(
-                        onClick = onRefreshClick,
-                        enabled = !isRefreshing && !isCooldownActive
-                    ) {
-                        if (isRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else if (isCooldownActive) {
-                            // Show timer icon when cooldown active
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = "Cooldown",
-                                    tint = Color.White.copy(alpha = 0.5f)
-                                )
-                                Text(
-                                    text = "$remainingMinutes",
-                                    fontSize = 10.sp,
-                                    color = Color.White.copy(alpha = 0.8f)
-                                )
-                            }
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh",
-                                tint = Color.White
-                            )
-                        }
-                    }
-
-                    // ✅ NEW: Show cooldown progress ring
-                    if (isCooldownActive && remainingMinutes > 0) {
-                        val progress = (30 - remainingMinutes).toFloat() / 30
-                        CircularProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier.size(30.dp),
-                            color = Color.White.copy(alpha = 0.3f),
-                            strokeWidth = 2.dp
-                        )
-                    }
-                }
-
-                // Three-dot Menu
-                ThreeDotMenu(
-                    onAboutClick = onAboutClick,
-                    onEmergencyClick = onEmergencyClick,
-                    iconColor = Color.White
-                )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("উলিপুর ভোটকেন্দ্র পর্যবেক্ষণ", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("সর্বশেষ আপডেট: $lastRefreshTime", fontSize = 12.sp, color = Color.White.copy(.8f))
             }
-
-            // Last refresh time
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "সর্বশেষ আপডেট: $lastRefreshTime",
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.7f)
+            IconButton(onClick = onRefreshClick, enabled = !isRefreshing) {
+                if (isRefreshing) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+                else Icon(Icons.Default.Refresh, null, tint = Color.White)
+            }
+            ThreeDotMenu(
+                modifier = Modifier,
+                onAboutClick = onAbout,
+                onEmergencyClick = onEmergency,
+                iconColor = Color.White
             )
         }
     }
 }
 
-/**
- * Shows refresh message banner
- */
 @Composable
-private fun RefreshMessageBanner(message: String) {
+private fun MessageBanner(text: String) {
+    Card(Modifier.padding(16.dp)) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Refresh, null)
+            Spacer(Modifier.width(8.dp))
+            Text(text)
+        }
+    }
+}
+
+@Composable
+private fun CooldownBanner(text: String, minutes: Long) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        Modifier.padding(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.size(20.dp)
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Text(
-                text = message,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-    }
-}
-
-/**
- * ✅ NEW: Shows cooldown message banner
- */
-@Composable
-private fun CooldownMessageBanner(
-    message: String,
-    minutesRemaining: Long
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFF9800).copy(alpha = 0.1f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = Color(0xFFFF9800),
-                modifier = Modifier.size(20.dp)
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = message,
-                    fontSize = 14.sp,
-                    color = Color(0xFFFF9800)
-                )
-
-                // ✅ NEW: Progress bar showing cooldown progress
-                if (minutesRemaining > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { (30 - minutesRemaining).toFloat() / 30 },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp),
-                        color = Color(0xFFFF9800)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "প্রগতি: ${((30 - minutesRemaining) * 100 / 30)}%",
-                        fontSize = 12.sp,
-                        color = Color(0xFFFF9800).copy(alpha = 0.8f)
-                    )
-                }
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Info, null, tint = Color(0xFFFF9800))
+                Spacer(Modifier.width(8.dp))
+                Text(text, color = Color(0xFFFF9800))
             }
+            LinearProgressIndicator(
+                progress = { (30 - minutes).coerceAtLeast(0).toFloat() / 30 },
+                color = Color(0xFFFF9800)
+            )
         }
     }
 }
 
-// ==================== DATA LOADING FUNCTIONS ====================
-
-/**
- * Loads initial data with cache-first approach
- */
-private suspend fun loadInitialData(
-    cacheManager: SimpleCacheManager,
-    refreshManager: SimpleRefreshManager,
-    onDataLoaded: (List<School>) -> Unit
-) {
-    println("🔄 Loading initial data...")
-
-    // Try cache first
-    try {
-        val cachedSchools = cacheManager.getSchoolsFromCache()
-        if (cachedSchools.isNotEmpty() && !cacheManager.isCacheExpired()) {
-            println("✅ Using cached data (${cachedSchools.size} schools)")
-            onDataLoaded(cachedSchools)
-            return
-        }
-    } catch (e: Exception) {
-        println("❌ Cache load failed: ${e.message}")
-    }
-
-    // Cache empty or expired, fetch from Firebase
-    try {
-        println("🔄 Cache expired/empty, fetching from Firebase...")
-        val result = refreshManager.forceRefresh()
-        if (result is com.example.appdeeps.sync.RefreshResult.Success) {
-            onDataLoaded(result.schools)
-        } else if (result is com.example.appdeeps.sync.RefreshResult.Error) {
-            println("❌ Firebase failed: ${result.message}")
-            // Try cache one more time as fallback
-            val cachedSchools = cacheManager.getSchoolsFromCache()
-            if (cachedSchools.isNotEmpty()) {
-                onDataLoaded(cachedSchools)
-            }
-        }
-    } catch (e: Exception) {
-        println("❌ Initial load completely failed: ${e.message}")
-    }
-}
-
-@Composable
-private fun SearchResultsIndicator(
-    searchQuery: String,
-    resultCount: Int
-) {
-    Text(
-        text = "‘$searchQuery’ অনুসন্ধানে ${resultCount}টি ভোটকেন্দ্র পাওয়া গেছে",
-        fontSize = 14.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp)
-    )
-}
+// ------------------ STATES ------------------
 
 @Composable
 private fun LoadingState() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator()
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("ডেটা লোড হচ্ছে \nআপনার ইন্টারনেট সংযোগ পরীক্ষা করুন")
-        }
+    Box(Modifier.fillMaxWidth().height(200.dp), Alignment.Center) {
+        CircularProgressIndicator()
     }
 }
 
 @Composable
-private fun EmptyState(searchQuery: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(16.dp)
-        ) {
-            if (searchQuery.isNotEmpty()) {
-                Text(
-                    text = "‘$searchQuery’ অনুসন্ধানে কোন ভোটকেন্দ্র পাওয়া যায়নি",
-                    fontSize = 16.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "অন্য কিছু লিখে চেষ্টা করুন",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text("কোনও ভোটকেন্দ্রের তথ্য পাওয়া যায়নি")
-                Text(
-                    "ফায়ারবেসে ডেটা যোগ করুন",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+private fun EmptyState(query: String) {
+    Box(Modifier.fillMaxWidth().height(200.dp), Alignment.Center) {
+        Text(if (query.isEmpty()) "কোনো তথ্য নেই" else "ফলাফল পাওয়া যায়নি")
     }
 }
+
+// ------------------ MAP ------------------
 
 private fun openGoogleMaps(school: School, context: android.content.Context) {
-    if (school.latitude != 0.0 && school.longitude != 0.0) {
-        try {
-            val gmmIntentUri = "geo:${school.latitude},${school.longitude}?q=${school.latitude},${school.longitude}(${Uri.encode(school.schoolName)})".toUri()
-            val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-            mapIntent.setPackage("com.google.android.apps.maps")
-            context.startActivity(mapIntent)
-        } catch (e: Exception) {
-            val webIntent = Intent(
-                Intent.ACTION_VIEW,
-                "https://www.google.com/maps/search/?api=1&query=${school.latitude},${school.longitude}".toUri()
-            )
-            context.startActivity(webIntent)
-        }
-    }
-}
-
-private fun logDebugInfo(message: String) {
-    println("🔍 DEBUG: $message")
+    if (school.latitude == 0.0 || school.longitude == 0.0) return
+    val uri =
+        "geo:${school.latitude},${school.longitude}?q=${school.latitude},${school.longitude}".toUri()
+    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
 }

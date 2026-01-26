@@ -41,9 +41,10 @@ class SimpleRefreshManager(
 
             // Check cooldown before syncing with Firebase
             if (!cooldownManager.canSyncSchools()) {
+                val minutesRemaining = cooldownManager.getSchoolSyncCooldownMinutes()
                 return RefreshResult.Cooldown(
-                    message = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। ${cooldownManager.getSchoolSyncCooldownMinutes()} মিনিট অপেক্ষা করুন।",
-                    minutesRemaining = cooldownManager.getSchoolSyncCooldownMinutes()
+                    message = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। $minutesRemaining মিনিট অপেক্ষা করুন।",
+                    minutesRemaining = minutesRemaining
                 )
             }
 
@@ -68,9 +69,10 @@ class SimpleRefreshManager(
 
             // Check cooldown first
             if (!cooldownManager.canSyncSchools()) {
+                val minutesRemaining = cooldownManager.getSchoolSyncCooldownMinutes()
                 return RefreshResult.Cooldown(
-                    message = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। ${cooldownManager.getSchoolSyncCooldownMinutes()} মিনিট অপেক্ষা করুন।",
-                    minutesRemaining = cooldownManager.getSchoolSyncCooldownMinutes()
+                    message = "৩০ মিনিটের জন্য সিঙ্ক্রোনাইজ বন্ধ। $minutesRemaining মিনিট অপেক্ষা করুন।",
+                    minutesRemaining = minutesRemaining
                 )
             }
 

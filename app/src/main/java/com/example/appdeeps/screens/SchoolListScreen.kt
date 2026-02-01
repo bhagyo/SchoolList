@@ -149,7 +149,8 @@ fun SchoolListScreen(
     val filteredSchools = remember(schools, searchText.text) {
         if (searchText.text.isEmpty()) schools
         else schools.filter {
-            it.schoolName.contains(searchText.text, true)
+            it.schoolName.contains(searchText.text, true) ||
+                    it.unionName.contains(searchText.text, true)
         }
     }
 

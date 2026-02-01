@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="black">#FF000000</color>
+    <color name="ic_launcher_background">#034F03</color>
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
     <color name="teal_200">#FF03DAC5</color>
     <color name="teal_700">#FF018786</color>
     <color name="white">#FFFFFFFF</color>
-    <string name="app_name">AppDeepS</string>
+    <string name="app_name">EDFO</string>
     <string name="gcm_defaultSenderId" translatable="false">343266193490</string>
     <string name="google_api_key" translatable="false">AIzaSyAH0F-eVLDiNDN4Q65v6uvyQuWNatbuD2Q</string>
     <string name="google_app_id" translatable="false">1:343266193490:android:4a76b07020d40e5662af8b</string>
